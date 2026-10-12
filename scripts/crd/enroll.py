@@ -643,8 +643,10 @@ def screenshot(page, tag):
         with open(path, "wb") as f:
             f.write(base64.b64decode(r["data"]))
         log("screenshot debug -> %s" % path)
+        return path
     except Exception as e:
         log("! screenshot gagal: %s" % e)
+        return ""
 
 
 def dump_state(page, tag):

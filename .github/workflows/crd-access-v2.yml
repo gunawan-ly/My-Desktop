@@ -28,6 +28,10 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 360
 
+    permissions:
+      contents: read
+      issues: write
+
     env:
       GOOGLE_USER: ${{ secrets.GOOGLE_USER }}
       GOOGLE_PASS: ${{ secrets.GOOGLE_PASS }}
@@ -136,6 +140,8 @@ jobs:
         env:
           CRD_NAME: ${{ inputs.hostname }}
           GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           KEEP_ALIVE_MINUTES: ${{ inputs.keep_alive_minutes }}
           CRD_OTP: ${{ inputs.otp || secrets.CRD_OTP }}
           CRD_CLEANUP: "0"
