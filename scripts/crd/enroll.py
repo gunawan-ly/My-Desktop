@@ -350,6 +350,30 @@ def wait_until(page, expr, timeout=30, invert=False):
     return False
 
 
+def wait_until_or_captcha(page, expr, timeout=30, invert=False, captcha_interval=10):
+    """Seperti wait_until, tapi cek CAPTCHA setiap captcha_interval detik.
+    Return True jika kondisi terpenuhi, "captcha" jika CAPTCHA terdeteksi, False jika timeout."""
+    deadline = time.time() + timeout
+    last_check = 0
+    while time.time() < deadline:
+        if time.time() - last_check >= captcha_interval:
+            last_check = time.time()
+            try:
+                import captcha_helper
+                if captcha_helper.is_captcha_page(lambda e, t=10: js(page, e, timeout=t)):
+                    return "captcha"
+            except Exception:
+                pass
+        try:
+            v = js(page, expr, timeout=10)
+            if bool(v) is not invert:
+                return True
+        except Exception:
+            pass
+        time.sleep(0.8)
+    return False
+
+
 def type_into(page, selector, value):
     ok = js(
         page,
@@ -397,6 +421,8 @@ def type_into(page, selector, value):
         "})()" % json.dumps(selector),
         timeout=15
     )
+    return True
+
 
 def click_login_button(page):
     selector = """
@@ -619,8 +645,10 @@ def screenshot(page, tag):
         with open(path, "wb") as f:
             f.write(base64.b64decode(r["data"]))
         log("screenshot debug -> %s" % path)
+        return path
     except Exception as e:
         log("! screenshot gagal: %s" % e)
+        return ""
 
 
 def dump_state(page, tag):
@@ -810,46 +838,88 @@ def login_google(page, user, password):
         "}return false;})()" % json.dumps(password_selector)
     )
 
-    if not wait_until(
+    _pwd_wait = wait_until_or_captcha(
         page,
         visible_password_js,
-        60
-    ):
+        60,
+        captcha_interval=10
+    )
+    if _pwd_wait != True:
+        # _pwd_wait bisa False (timeout) atau "captcha" (terdeteksi dini)
+        # Keduanya lanjut ke pengecekan CAPTCHA di bawah
+        _captcha_solved = False
+        if _pwd_wait == "captcha":
+            log("CAPTCHA terdeteksi dini saat menunggu password.")
         dump_state(page, "login-password")
         screenshot(page, "login-password")
-        # CAPTCHA check sebelum die
+        # CAPTCHA check sebelum die — dengan retry: kalau jawaban salah atau
+        # tidak terkirim, ulangi screenshot + issue baru tanpa mengulang
+        # enrollment dari awal.
+        _MAX_CAPTCHA_ATTEMPTS = 3
         try:
-            log("DEBUG: Cek CAPTCHA...")
             import captcha_helper
             log("DEBUG: captcha_helper imported")
             _js_fn = lambda expr, timeout=10: js(page, expr, timeout=timeout)
-            _is_cap = captcha_helper.is_captcha_page(_js_fn)
-            log(f"DEBUG: is_captcha={_is_cap}")
-            if _is_cap:
-                log("CAPTCHA terdeteksi; tangani via issue...")
+            _attempt = 0
+            while _attempt < _MAX_CAPTCHA_ATTEMPTS and not _captcha_solved:
+                _attempt += 1
+                _is_cap = captcha_helper.is_captcha_page(_js_fn)
+                log(f"DEBUG: CAPTCHA percobaan {_attempt}/{_MAX_CAPTCHA_ATTEMPTS}, is_captcha={_is_cap}")
+                if not _is_cap:
+                    # CAPTCHA hilang sendiri — mungkin password sudah muncul
+                    if wait_until(page, visible_password_js, 10):
+                        log("Lanjut setelah CAPTCHA (password muncul).")
+                        _captcha_solved = True
+                    else:
+                        log("CAPTCHA tidak terdeteksi tapi password juga tidak muncul.")
+                    break
+                log(f"CAPTCHA terdeteksi; tangani via issue (percobaan {_attempt})...")
                 _s = screenshot(page, "crd-captcha")
+                log(f"DEBUG: screenshot CAPTCHA: {_s!r}")
                 if _s:
                     captcha_helper.upload_screenshot_artifact(_s)
-                _iss = captcha_helper.create_status_issue("", os.environ.get("GITHUB_RUN_ID", "manual"))
-                if _iss:
-                    _ans = captcha_helper.wait_for_issue_answer(_iss, timeout_minutes=10)
-                    if _ans:
-                        _sel = captcha_helper.get_captcha_input_selector(lambda expr, timeout=10: js(page, expr, timeout=timeout))
-                        if _sel and type_into(page, _sel, _ans):
+                _iss = captcha_helper.create_status_issue(_s or "", os.environ.get("GITHUB_RUN_ID", "manual"))
+                if not _iss:
+                    log("Gagal membuat issue CAPTCHA; hentikan percobaan.")
+                    break
+                _ans = captcha_helper.wait_for_issue_answer(_iss, timeout_minutes=10)
+                if not _ans:
+                    captcha_helper.close_issue(_iss, "timeout")
+                    log("Timeout menunggu jawaban CAPTCHA.")
+                    break
+                _sel = captcha_helper.get_captcha_input_selector(_js_fn)
+                log(f"DEBUG: captcha input selector: {_sel!r}")
+                _submitted = False
+                if _sel:
+                    try:
+                        if type_into(page, _sel, _ans):
                             press_enter(page)
-                            if wait_until(page, visible_password_js, 30):
-                                log("Lanjut setelah CAPTCHA.")
-                            else:
-                                die("Password tidak muncul setelah CAPTCHA.")
-                        captcha_helper.close_issue(_iss, "done")
-                    else:
-                        captcha_helper.close_issue(_iss, "timeout")
+                            _submitted = True
+                            log("Jawaban CAPTCHA diketik + Enter.")
+                    except Exception as _te:
+                        log(f"Gagal mengetik jawaban CAPTCHA: {_te}")
+                else:
+                    log("Selector input CAPTCHA tidak ditemukan; jawaban tidak diketik.")
+                screenshot(page, "crd-captcha-submitted")
+                if _submitted and wait_until(page, visible_password_js, 30):
+                    log("Lanjut setelah CAPTCHA.")
+                    _captcha_solved = True
+                    captcha_helper.close_issue(_iss, "done")
+                else:
+                    # Jawaban salah atau tidak terkirim — Google menampilkan
+                    # CAPTCHA baru; tutup issue ini dan ulangi dengan
+                    # screenshot baru.
+                    captcha_helper.close_issue(_iss, "gagal")
+                    log(f"Percobaan {_attempt} gagal; ulangi dengan CAPTCHA baru.")
+                    time.sleep(2)
         except Exception as _e:
             log(f"CAPTCHA handler error: {_e}")
-        die(
-            "Input password tidak muncul setelah email. "
-            "Lihat DEBUG + screenshot."
-        )
+        if not _captcha_solved:
+            die(
+                "Input password tidak muncul setelah email. "
+                "Lihat DEBUG + screenshot."
+            )
+        # Jika _captcha_solved True, lanjut ke bawah (tidak die)
 
     # Tunggu form Google selesai hydrate (avoid race: isi saat masih
     # "Loading" bisa di-reset oleh React setelah mount).
