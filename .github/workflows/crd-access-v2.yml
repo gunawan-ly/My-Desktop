@@ -187,10 +187,20 @@ jobs:
             exit 0
           fi
           echo "Mencoba set 1600x900 pada $sid..."
-          if displayplacer "id:$sid res:1600x900 hz:60 color_depth:8 enabled:true scaling:off origin:(0,0) degree:0" 2>&1 | tail -5; then
+          # Ambil hz & color_depth aktual dari daftar mode (jangan hardcode:
+          # display virtual runner hanya menyediakan color_depth 7, bukan 8).
+          mode_line="$(echo "$list_out" | grep -o 'res:1600x900 hz:[0-9]* color_depth:[0-9]*' | head -1 || true)"
+          if [ -z "$mode_line" ]; then
+            echo "::warning::mode 1600x900 tidak ada di daftar displayplacer; lewati."
+            exit 0
+          fi
+          hz="$(echo "$mode_line" | grep -o 'hz:[0-9]*' | cut -d: -f2)"
+          cdp="$(echo "$mode_line" | grep -o 'color_depth:[0-9]*' | cut -d: -f2)"
+          echo "Mode terdeteksi: res:1600x900 hz:$hz color_depth:$cdp"
+          if displayplacer "id:$sid res:1600x900 hz:$hz color_depth:$cdp enabled:true scaling:off origin:(0,0) degree:0" 2>&1 | tail -5; then
             echo "Resolusi 1600x900 diterapkan."
           else
-            echo "::warning::displayplacer gagal set 1600x900 (mode mungkin tidak didukung di display ini)."
+            echo "::warning::displayplacer gagal set 1600x900."
           fi
 
       - name: Upload Debug Artifacts
