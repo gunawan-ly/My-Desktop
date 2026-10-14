@@ -148,6 +148,51 @@ jobs:
         run: |
           bash scripts/crd/setup_crd_v2.sh
 
+      - name: Install aplikasi sesi (BetterDisplay + displayplacer)
+        if: ${{ success() }}
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          echo "Install BetterDisplay (untuk pemakaian manual selama sesi)..."
+          brew install --cask betterdisplay 2>&1 | tail -2 || echo "::warning::brew install betterdisplay gagal"
+          echo "Install displayplacer (untuk set resolusi display)..."
+          brew install displayplacer 2>&1 | tail -2 || echo "::warning::brew install displayplacer gagal"
+          echo "Install selesai."
+
+      - name: Terapkan settingan macOS (dark mode, aksesibilitas, region)
+        if: ${{ success() }}
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          echo "Set Dark Mode..."
+          osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to true' 2>/dev/null \
+            || echo "::warning::set dark mode gagal"
+          echo "Set Reduce transparency/motion OFF (eksplisit)..."
+          defaults write com.apple.universalaccess reduceTransparency -bool false
+          defaults write com.apple.universalaccess reduceMotion -bool false
+          echo "Set Region Asia/Indonesia (bahasa TIDAK diubah)..."
+          defaults write NSGlobalDomain AppleLocale -string "id_ID"
+          echo "Settingan diterapkan."
+
+      - name: Set resolusi display 1600x900 (displayplacer)
+        if: ${{ success() }}
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          list_out="$(displayplacer list 2>/dev/null || true)"
+          echo "$list_out" | head -25
+          sid="$(echo "$list_out" | awk '/Persistent screen id:/{print $4; exit}')"
+          if [ -z "$sid" ]; then
+            echo "::warning::tidak dapat membaca screen id dari displayplacer; lewati."
+            exit 0
+          fi
+          echo "Mencoba set 1600x900 pada $sid..."
+          if displayplacer "id:$sid res:1600x900 hz:60 color_depth:8 enabled:true scaling:off origin:(0,0) degree:0" 2>&1 | tail -5; then
+            echo "Resolusi 1600x900 diterapkan."
+          else
+            echo "::warning::displayplacer gagal set 1600x900 (mode mungkin tidak didukung di display ini)."
+          fi
+
       - name: Upload Debug Artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
