@@ -1,10 +1,10 @@
-name: macOS - Chrome Remote Desktop (V2)
+name: Sesi Runner (V2)
 
 on:
   workflow_dispatch:
     inputs:
       hostname:
-        description: 'Nama host yang tampil di aplikasi Chrome Remote Desktop (default: mac-<run_id>).'
+        description: 'Nama host yang tampil di aplikasi CRD (default: mac-<run_id>).'
         required: false
         default: ''
       keep_alive_minutes:
@@ -24,7 +24,7 @@ defaults:
 
 jobs:
   crd:
-    name: Chrome Remote Desktop (V2 - verifikasi penuh)
+    name: Sesi Runner (V2)
     runs-on: macos-latest
     timeout-minutes: 360
 
@@ -136,7 +136,7 @@ jobs:
             echo "::warning::Pastikan secret CRD_SUDO_PASS utk fallback run_sudo."
           fi
 
-      - name: Setup Chrome Remote Desktop (V2)
+      - name: Setup CRD (V2)
         env:
           CRD_NAME: ${{ inputs.hostname }}
           GITHUB_RUN_ID: ${{ github.run_id }}
@@ -159,7 +159,7 @@ jobs:
           brew install displayplacer 2>&1 | tail -2 || echo "::warning::brew install displayplacer gagal"
           echo "Install selesai."
 
-      - name: Terapkan settingan macOS (dark mode, aksesibilitas, region)
+      - name: Terapkan settingan sesi (dark mode, aksesibilitas, region)
         if: ${{ success() }}
         continue-on-error: true
         run: |

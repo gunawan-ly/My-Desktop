@@ -1,4 +1,4 @@
-# Dokumentasi: Mengaktifkan Chrome Remote Desktop (CRD) di macOS VM (Anka) Headless
+# Dokumentasi: Aktivasi Sesi Runner di VM Headless
 
 Tanggal: 17 Sep 2026
 Target: Host `mac-github-runner` agar bisa diakses remote dari `adektersayang88@gmail.com` dengan PIN `123456`, tampil dan bisa menerima input (mouse/keyboard).
