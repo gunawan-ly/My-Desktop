@@ -1,4 +1,4 @@
-name: macOS - SSH via Tailscale
+name: SSH via Tailscale
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ defaults:
 
 jobs:
   ssh:
-    name: Tailscale + SSH on macos-latest
+    name: Tailscale + SSH
     runs-on: macos-latest
     timeout-minutes: 360
 
