@@ -1,7 +1,8 @@
-name: Kasm Workspace via Tailscale
+name: Kasm Workspace (Tailscale + Public Link)
 
 # Satu kali jalan: Tailscale + SSH, install Kasm Workspaces,
-# (opsional) build image OBS, daftarkan workspace, reset password.
+# (opsional) build image OBS, daftarkan workspace, reset password,
+# expose Kasm via link publik Cloudflare Tunnel.
 # Dipakai untuk eksperimen/pemetaan sebelum jadi layanan tetap.
 
 on:
@@ -36,6 +37,11 @@ on:
         description: 'Durasi keep-alive dalam menit (maks 355).'
         required: false
         default: '355'
+      cloudflare_tunnel:
+        description: 'Expose Kasm via link publik Cloudflare (lebih cepat dari Tailscale).'
+        required: false
+        type: boolean
+        default: true
 
 run-name: 'Kasm Workspace (${{ github.run_id }})'
 
@@ -93,6 +99,11 @@ jobs:
           KASM_USER_PASSWORD: ${{ inputs.kasm_user_password }}
         run: |
           bash scripts/kasm/setup_kasm.sh
+
+      - name: Setup Cloudflare Tunnel
+        if: ${{ inputs.cloudflare_tunnel }}
+        run: |
+          bash scripts/kasm/setup_cloudflare_tunnel.sh
 
       - name: Keep Alive
         env:
