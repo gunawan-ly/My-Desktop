@@ -1,0 +1,101 @@
+name: Kasm Workspace via Tailscale
+
+# Satu kali jalan: Tailscale + SSH, install Kasm Workspaces,
+# (opsional) build image OBS, daftarkan workspace, reset password.
+# Dipakai untuk eksperimen/pemetaan sebelum jadi layanan tetap.
+
+on:
+  workflow_dispatch:
+    inputs:
+      kasm_download_url:
+        description: 'URL tarball installer Kasm.'
+        required: false
+        default: 'https://kasm-static-content.s3.amazonaws.com/kasm_release_1.17.0.7f020d.tar.gz'
+      kasm_sha256:
+        description: 'SHA256 tarball (kosongkan untuk lewati verifikasi).'
+        required: false
+        default: '22a293ea52b2adb7f3f72a2de8e9be799f443b9da040e066df403478da77f62d'
+      kasm_image_tag:
+        description: 'Tag image kasmweb/* dan custom/* (mis. 1.17.0).'
+        required: false
+        default: '1.17.0'
+      install_obs:
+        description: 'Build image OBS Studio (PPA resmi + Browser Source).'
+        required: false
+        type: boolean
+        default: true
+      kasm_admin_password:
+        description: 'Password admin@kasm.local'
+        required: false
+        default: 'awankasm2026'
+      kasm_user_password:
+        description: 'Password user@kasm.local'
+        required: false
+        default: 'kasmuser2026'
+      keep_alive_minutes:
+        description: 'Durasi keep-alive dalam menit (maks 355).'
+        required: false
+        default: '355'
+
+run-name: 'Kasm Workspace (${{ github.run_id }})'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  kasm:
+    name: Kasm Workspace
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Validate Configuration
+        env:
+          TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+          SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
+          LINUX_USER_PASSWORD: ${{ secrets.LINUX_USER_PASSWORD }}
+        run: |
+          set -u
+          if [ -z "${TAILSCALE_AUTHKEY:-}" ]; then
+            echo "::error::Secret TAILSCALE_AUTHKEY belum dikonfigurasi."
+            exit 1
+          fi
+          if [ -z "${SSH_PUBLIC_KEY:-}" ] && [ -z "${LINUX_USER_PASSWORD:-}" ]; then
+            echo "::error::Set secret SSH_PUBLIC_KEY (public key) atau LINUX_USER_PASSWORD (password) agar bisa login SSH."
+            exit 1
+          fi
+          if [ -z "${{ inputs.kasm_admin_password }}" ] || [ -z "${{ inputs.kasm_user_password }}" ]; then
+            echo "::error::Password admin/user Kasm tidak boleh kosong."
+            exit 1
+          fi
+          echo "Configuration valid."
+
+      - name: Setup Tailscale + SSH
+        env:
+          TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+          SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
+          LINUX_USER_PASSWORD: ${{ secrets.LINUX_USER_PASSWORD }}
+          TS_HOSTNAME: kasm-${{ github.run_id }}
+        run: |
+          bash scripts/ssh/tailscale_ssh_linux.sh
+
+      - name: Install Kasm Workspaces
+        env:
+          KASM_DOWNLOAD_URL: ${{ inputs.kasm_download_url }}
+          KASM_SHA256: ${{ inputs.kasm_sha256 }}
+          KASM_IMAGE_TAG: ${{ inputs.kasm_image_tag }}
+          INSTALL_OBS: ${{ inputs.install_obs }}
+          KASM_ADMIN_PASSWORD: ${{ inputs.kasm_admin_password }}
+          KASM_USER_PASSWORD: ${{ inputs.kasm_user_password }}
+        run: |
+          bash scripts/kasm/setup_kasm.sh
+
+      - name: Keep Alive
+        env:
+          KEEP_ALIVE_MINUTES: ${{ inputs.keep_alive_minutes }}
+        run: |
+          bash scripts/keep_alive.sh
