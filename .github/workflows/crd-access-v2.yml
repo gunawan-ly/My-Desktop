@@ -159,6 +159,48 @@ jobs:
           brew install displayplacer 2>&1 | tail -2 || echo "::warning::brew install displayplacer gagal"
           echo "Install selesai."
 
+      - name: Install aplikasi chat (Telegram + WhatsApp + Discord)
+        if: ${{ success() }}
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          echo "Install Telegram Desktop..."
+          brew install --cask telegram 2>&1 | tail -2 || echo "::warning::brew install telegram gagal"
+          echo "Install WhatsApp Desktop..."
+          brew install --cask whatsapp 2>&1 | tail -2 || echo "::warning::brew install whatsapp gagal"
+          echo "Install Discord..."
+          brew install --cask discord 2>&1 | tail -2 || echo "::warning::brew install discord gagal"
+          echo "Install aplikasi chat selesai."
+
+      - name: Kumpulkan paket installer (untuk install manual)
+        if: ${{ success() }}
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          mkdir -p ~/app-packages
+          # Ambil file installer dari cache Homebrew
+          for cask in telegram whatsapp discord; do
+            brew fetch --cask "$cask" 2>&1 | tail -1 || true
+          done
+          # Copy file .dmg/.zip ke folder paket
+          find ~/Library/Caches/Homebrew/Cask -maxdepth 1 \( -name "telegram--*" -o -name "discord--*" \) -exec cp {} ~/app-packages/ \; 2>/dev/null || true
+          find ~/Library/Caches/Homebrew/downloads -name "*WhatsApp*.zip" -exec cp {} ~/app-packages/ \; 2>/dev/null || true
+          # Rename biar rapi
+          cd ~/app-packages
+          for f in telegram--*; do [ -f "$f" ] && mv "$f" "Telegram-$(echo $f | cut -d- -f3 | cut -d, -f1).zip" 2>/dev/null; done
+          for f in discord--*; do [ -f "$f" ] && mv "$f" "Discord-$(echo $f | cut -d- -f3).dmg" 2>/dev/null; done
+          for f in *WhatsApp*.zip; do [ -f "$f" ] && mv "$f" "WhatsApp.zip" 2>/dev/null; done
+          ls -lh ~/app-packages/ || echo "tidak ada paket"
+
+      - name: Upload paket installer
+        if: ${{ success() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-packages-mac
+          path: ~/app-packages/
+          retention-days: 7
+
       - name: Terapkan settingan sesi (dark mode, aksesibilitas, region)
         if: ${{ success() }}
         continue-on-error: true
