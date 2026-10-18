@@ -4,13 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       hostname:
-        description: 'Nama host yang tampil di aplikasi CRD (default: mac-<run_id>).'
+        description: 'Nama host yang tampil di aplikasi CRD (default: Macbook).'
         required: false
-        default: ''
+        default: 'Macbook'
       keep_alive_minutes:
         description: 'Durasi keep-alive dalam menit (maks 355).'
         required: false
-        default: '355'
+        default: '345'
       otp:
         description: 'Security code OTP dari HP (Settings > Google > Manage Google Account > Security & sign-in > Security code). Diperlukan saat job memakai perangkat/login baru; jika kosong memakai secret CRD_OTP.'
         required: false
