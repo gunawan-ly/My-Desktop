@@ -28,7 +28,7 @@ jobs:
         env:
           TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
           SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
-          LINUX_USER_PASSWORD: ${{ secrets.LINUX_USER_PASSWORD }}
+          LINUX_USER_PASSWORD: 'Awan*123'
         run: |
           set -u
           if [ -z "${TAILSCALE_AUTHKEY:-}" ]; then
@@ -45,7 +45,7 @@ jobs:
         env:
           TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
           SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
-          LINUX_USER_PASSWORD: ${{ secrets.LINUX_USER_PASSWORD }}
+          LINUX_USER_PASSWORD: 'Awan*123'
           TS_HOSTNAME: linux-${{ github.run_id }}
         run: |
           bash scripts/ssh/tailscale_ssh_linux.sh

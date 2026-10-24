@@ -67,11 +67,17 @@ enable_ssh() {
     log "Fingerprint authorized_keys: $(ssh-keygen -l -f "$HOME/.ssh/authorized_keys" 2>/dev/null | head -n1 || echo n/a)"
   fi
 
-  # Login dengan password (opsional, best-effort).
-  if [ -z "$SSH_PUBLIC_KEY" ] && [ -n "$LINUX_USER_PASSWORD" ]; then
+  # Login dengan password (bila LINUX_USER_PASSWORD terisi).
+  if [ -n "$LINUX_USER_PASSWORD" ]; then
     log "Mengatur password akun $USER_NAME..."
     printf '%s:%s\n' "$USER_NAME" "$LINUX_USER_PASSWORD" | sudo chpasswd \
       || log "Peringatan: pengaturan password gagal."
+    log "Mengaktifkan PasswordAuthentication di sshd..."
+    printf '%s\n' 'PasswordAuthentication yes' 'KbdInteractiveAuthentication yes' \
+      | sudo tee /etc/ssh/sshd_config.d/01-password-auth.conf >/dev/null
+    sudo service ssh restart >/dev/null 2>&1 || sudo /usr/sbin/sshd >/dev/null 2>&1 || true
+    sleep 2
+    pgrep -f 'sshd' >/dev/null 2>&1 || log "Peringatan: sshd tidak terdeteksi setelah restart."
   fi
 
   log "SSH aktif untuk user $USER_NAME."
@@ -106,8 +112,9 @@ main() {
   echo ""
   if [ -n "$SSH_PUBLIC_KEY" ]; then
     echo "   Auth : public key (~/.ssh/id_*.pub) milik pemilik secret SSH_PUBLIC_KEY"
-  elif [ -n "$LINUX_USER_PASSWORD" ]; then
-    echo "   Auth : password akun $(id -un) (= nilai secret LINUX_USER_PASSWORD)"
+  fi
+  if [ -n "$LINUX_USER_PASSWORD" ]; then
+    echo "   Auth : password akun $(id -un) (terpasang dari workflow)"
   fi
   echo "   Catat: perangkat kamu harus join ke TAILNET yang sama."
   echo "===================================================================="
