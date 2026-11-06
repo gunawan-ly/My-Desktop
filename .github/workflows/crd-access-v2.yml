@@ -172,6 +172,51 @@ jobs:
           brew install --cask discord 2>&1 | tail -2 || echo "::warning::brew install discord gagal"
           echo "Install aplikasi chat selesai."
 
+      - name: Potret layar verifikasi aplikasi chat
+        if: ${{ success() }}
+        continue-on-error: true
+        run: |
+          bash scripts/crd/chat_apps_verify.sh
+
+      - name: Upload screenshot verifikasi
+        if: ${{ success() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: verifikasi-chat-apps-${{ github.run_id }}
+          path: /tmp/verifikasi-*.png
+          if-no-files-found: ignore
+
+      - name: Buat issue verifikasi aplikasi chat
+        if: ${{ success() }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          cat > /tmp/issue-verifikasi.md <<'EOF'
+          Halo Awan! Ketiga aplikasi chat (Telegram, WhatsApp, Discord) sudah terpasang dan dibuka di sesi runner ini, lalu layar verifikasi device masing-masing sudah dipotret.
+
+          **Screenshot ada di artifact run ini:**
+          - Nama artifact: `verifikasi-chat-apps-${{ github.run_id }}`
+          - Halaman run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          - Unduh artifact dari bagian **Artifacts** di halaman run itu, isinya: `verifikasi-telegram.png`, `verifikasi-whatsapp.png`, `verifikasi-discord.png`.
+
+          **Cara membaca hasilnya:**
+          - Nomor / kode verifikasi device terbaca langsung di screenshot (WhatsApp: kode tautan perangkat atau QR; Telegram: kode login atau QR; Discord: form login).
+          - QR berumur pendek dan biasanya sudah kedaluwarsa saat issue ini dibaca, jadi **nomor / kode adalah yang utama**; QR hanya cadangan bila dibaca secepatnya.
+          - Bila sebuah aplikasi ternyata sudah login, screenshot-nya menunjukkan daftar chat apa adanya (berarti aplikasi itu tidak butuh verifikasi).
+
+          _Issue ini tidak ditutup otomatis; tutup manual sesudah verifikasi selesai._
+          EOF
+          if gh issue create \
+              --title "Verifikasi aplikasi chat - run ${{ github.run_id }}" \
+              --body-file /tmp/issue-verifikasi.md; then
+            echo "Issue verifikasi aplikasi chat dibuat."
+          else
+            echo "::warning::gh issue create gagal; screenshot tetap tersedia di artifact run."
+          fi
+
       - name: Terapkan settingan sesi (dark mode, aksesibilitas, region)
         if: ${{ success() }}
         continue-on-error: true
