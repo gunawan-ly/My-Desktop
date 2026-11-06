@@ -950,6 +950,7 @@ def login_google(page, user, password):
     resend_count = 0
     otp_used = False
     ootp_since = 0.0
+    verif_reported = False
 
     def resend_prompt():
         # Klik tombol "Resend it" pada halaman Google prompt bila ada.
@@ -967,6 +968,32 @@ def login_google(page, user, password):
         except Exception:
             pass
         return False
+
+    def lapor_verifikasi(tag, keterangan):
+        # Callback verifikasi login (BUKAN captcha): potret layar lalu
+        # laporkan lewat jalur yang sama persis seperti jalur CAPTCHA di
+        # berkas ini: upload_screenshot_artifact + create_status_issue
+        # milik captcha_helper. Bedanya: wait_for_issue_answer TIDAK
+        # dipanggil, laporan ini satu arah dan alur login tidak pernah
+        # menunggu jawaban issue. Flag verif_reported dipakai bersama
+        # jalur device prompt dan jalur challenge lain: maksimal satu
+        # laporan per run. Tag screenshot "verifikasi-login" membuat
+        # nama berkasnya beda dari berkas CAPTCHA ("crd-captcha").
+        nonlocal verif_reported
+        if verif_reported:
+            return
+        verif_reported = True
+        try:
+            import captcha_helper
+            _s = screenshot(page, tag)
+            log("Callback verifikasi login (%s): screenshot %r" % (keterangan, _s))
+            if _s:
+                captcha_helper.upload_screenshot_artifact(_s)
+            _iss = captcha_helper.create_status_issue(
+                _s or "", os.environ.get("GITHUB_RUN_ID", "manual"))
+            log("Callback verifikasi login: issue laporan: %r" % (_iss,))
+        except Exception as _e:
+            log("Callback verifikasi login gagal (diabaikan): %s" % _e)
 
     while time.time() < deadline:
         try:
@@ -1016,6 +1043,14 @@ def login_google(page, user, password):
                     log(" di HP, ketuk Yes lalu angka: %s" % code)
                     log("===============================================")
                     log("")
+                # Callback verifikasi: laporkan kemunculan pertama
+                # prompt ini ke issue (screenshot memuat angkanya);
+                # sesudah itu perilaku lama di bawah tidak berubah.
+                if not verif_reported:
+                    _ket = "Google Prompt '/signin/challenge/dp'"
+                    if code:
+                        _ket += "; angka Tap di layar: %s" % code
+                    lapor_verifikasi("verifikasi-login", _ket)
                 if time.time() - prompt_since > 90:
                     resend_prompt()
                     prompt_since = time.time()
@@ -1148,11 +1183,18 @@ def login_google(page, user, password):
             )
 
             if challenge:
+                # Callback verifikasi: laporkan dulu ke issue sebelum
+                # mati (flag bersama mencegah laporan ganda bila run
+                # ini sudah melapor dari jalur device prompt).
+                lapor_verifikasi(
+                    "verifikasi-login",
+                    "challenge/%s tanpa handler" % challenge.group(1))
                 dump_state(page, "login-2fa")
                 screenshot(page, "login-2fa")
                 die(
                     "Google meminta verifikasi tambahan "
-                    "(2FA/challenge)."
+                    "(2FA/challenge). Keadaan ini sudah dilaporkan "
+                    "ke issue oleh callback verifikasi login."
                 )
 
             # Masih berada di halaman password.
