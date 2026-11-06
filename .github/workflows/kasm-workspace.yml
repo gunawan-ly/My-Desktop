@@ -24,6 +24,11 @@ on:
         required: false
         type: boolean
         default: true
+      install_artcraft:
+        description: 'Build ArtCraft Suite + 14 workspace single-app.'
+        required: false
+        type: boolean
+        default: true
       kasm_admin_password:
         description: 'Password admin@kasm.local'
         required: false
@@ -93,6 +98,13 @@ jobs:
           KASM_USER_PASSWORD: ${{ inputs.kasm_user_password }}
         run: |
           bash scripts/kasm/setup_kasm.sh
+
+      - name: Build ArtCraft Workspaces
+        if: ${{ inputs.install_artcraft }}
+        env:
+          KASM_IMAGE_TAG: ${{ inputs.kasm_image_tag }}
+        run: |
+          bash scripts/kasm/build_artcraft.sh
 
       - name: Keep Alive
         env:

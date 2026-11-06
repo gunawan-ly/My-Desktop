@@ -4,13 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       hostname:
-        description: 'Nama host yang tampil di aplikasi CRD (default: mac-<run_id>).'
+        description: 'Nama host yang tampil di aplikasi CRD (default: Macbook).'
         required: false
-        default: ''
+        default: 'Macbook'
       keep_alive_minutes:
         description: 'Durasi keep-alive dalam menit (maks 355).'
         required: false
-        default: '355'
+        default: '345'
       otp:
         description: 'Security code OTP dari HP (Settings > Google > Manage Google Account > Security & sign-in > Security code). Diperlukan saat job memakai perangkat/login baru; jika kosong memakai secret CRD_OTP.'
         required: false
@@ -158,6 +158,19 @@ jobs:
           echo "Install displayplacer (untuk set resolusi display)..."
           brew install displayplacer 2>&1 | tail -2 || echo "::warning::brew install displayplacer gagal"
           echo "Install selesai."
+
+      - name: Install aplikasi chat (Telegram + WhatsApp + Discord)
+        if: ${{ success() }}
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          echo "Install Telegram Desktop..."
+          brew install --cask telegram 2>&1 | tail -2 || echo "::warning::brew install telegram gagal"
+          echo "Install WhatsApp Desktop..."
+          brew install --cask whatsapp 2>&1 | tail -2 || echo "::warning::brew install whatsapp gagal"
+          echo "Install Discord..."
+          brew install --cask discord 2>&1 | tail -2 || echo "::warning::brew install discord gagal"
+          echo "Install aplikasi chat selesai."
 
       - name: Terapkan settingan sesi (dark mode, aksesibilitas, region)
         if: ${{ success() }}
