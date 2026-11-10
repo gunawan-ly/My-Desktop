@@ -958,6 +958,12 @@ def login_google(page, user, password):
     foreign_href = ""
     foreign_since = 0.0
     foreign_reported = False
+    # Pelacak percobaan klik lewati speedbump passkey: dihitung per
+    # href passkey yang sama; sesudah beberapa kali klik nyata pun
+    # halaman tidak pindah, keadaan itu dilaporkan satu kali.
+    passkey_href = ""
+    passkey_attempts = 0
+    passkey_reported = False
 
     def resend_prompt():
         # Klik tombol "Resend it" pada halaman Google prompt bila ada.
@@ -1205,11 +1211,21 @@ def login_google(page, user, password):
                     r"Create a passkey", body, re.I
                 ):
                     reset_asing()
+                    if href != passkey_href:
+                        passkey_href = href
+                        passkey_attempts = 0
+                        passkey_reported = False
+                    passkey_attempts += 1
+                    # Klik WAJIB klik mouse nyata (real_click_element,
+                    # CDP Input seperti tombol Next). JANGAN pakai
+                    # click_by_text: klik JS-nya selalu mengaku berhasil
+                    # walau tidak berefek, dan karena dirangkai "or"
+                    # klik nyata tidak pernah jalan (run 42735603288:
+                    # "Not now" terklik 254 kali, halaman tidak pindah).
                     terklik = ""
                     for teks in ("Not now", "Skip", "No thanks", "Cancel"):
                         try:
-                            ok = click_by_text(page, teks) or \
-                                real_click_element(page, teks)
+                            ok = real_click_element(page, teks)
                         except Exception:
                             ok = False
                         if ok:
@@ -1217,11 +1233,21 @@ def login_google(page, user, password):
                             break
                     if terklik:
                         log("Halaman speedbump passkey enrollment "
-                            "terdeteksi; tombol lewati %r diklik." % terklik)
+                            "terdeteksi; tombol lewati %r diklik nyata "
+                            "(percobaan ke-%d)." % (terklik, passkey_attempts))
                     else:
                         log("Halaman speedbump passkey enrollment "
                             "terdeteksi; tombol lewati belum ketemu, "
                             "dicoba lagi iterasi berikut.")
+                    if passkey_attempts >= 5 and not passkey_reported:
+                        passkey_reported = True
+                        log("Speedbump passkey tidak pindah sesudah "
+                            "%d kali percobaan klik; dilaporkan ke "
+                            "issue dengan screenshot." % passkey_attempts)
+                        lapor_verifikasi(
+                            "verifikasi-login",
+                            "speedbump passkey tidak pindah sesudah "
+                            "%d kali klik lewati" % passkey_attempts)
                     time.sleep(2)
                     continue
                 # Speedbump selain passkey tidak ditebak tombolnya;
