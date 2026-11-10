@@ -589,6 +589,60 @@ def real_click_center(page, x, y):
         return False
 
 
+def scroll_ke_teks(page, text):
+    """Gulir elemen visible berteks persis ke tengah layar."""
+    return bool(js(
+        page,
+        "(function(){var q='%s';"
+        "var best=null;"
+        "var els=document.querySelectorAll('button,a,[role=button],div,li,span');"
+        "for(var el of els){"
+        "var t=(el.innerText||'').trim();"
+        "if(t!==q)continue;"
+        "var r=el.getBoundingClientRect();"
+        "var n=el.getElementsByTagName('*').length;"
+        "if(r.width>0&&r.height>0&&(best===null||n>best.n))best={el:el,n:n};"
+        "}"
+        "if(!best)return false;"
+        "best.el.scrollIntoView({block:'center',inline:'nearest'});"
+        "return true;})()" % text.replace("\\", "\\\\").replace("'", "\\'").replace("\n", " "),
+        timeout=15
+    ))
+
+
+def gulir_ke_bawah(page):
+    """Gulir halaman sampai ke bawah (konten speedbump panjang)."""
+    try:
+        js(
+            page,
+            "(function(){var e=document.scrollingElement||document.documentElement;"
+            "if(e)e.scrollTop=e.scrollHeight;"
+            "window.scrollTo(0,1000000);return true;})()",
+            timeout=15
+        )
+    except Exception:
+        pass
+
+
+def teks_tombol_visible(page):
+    """Daftar teks tombol/link yang sedang terlihat, buat diagnosis."""
+    try:
+        return js(
+            page,
+            "(function(){var out=[];"
+            "var els=document.querySelectorAll('button,a,[role=button]');"
+            "for(var el of els){"
+            "var r=el.getBoundingClientRect();"
+            "var t=(el.innerText||el.getAttribute('aria-label')||'').trim();"
+            "if(t&&r.width>0&&r.height>0&&out.indexOf(t)<0)out.push(t);"
+            "}"
+            "return out.join(' | ').slice(0,300);})()",
+            timeout=15
+        ) or ""
+    except Exception:
+        return ""
+
+
 def real_click_element(page, text_or_sel):
     """Klik nyata elemen berdasar teks persis atau selector CSS."""
     c = center_by_text(page, text_or_sel) or center_by_css(page, text_or_sel)
@@ -1222,9 +1276,19 @@ def login_google(page, user, password):
                     # walau tidak berefek, dan karena dirangkai "or"
                     # klik nyata tidak pernah jalan (run 42735603288:
                     # "Not now" terklik 254 kali, halaman tidak pindah).
+                    # Halaman speedbump ini PANJANG: screenshot run
+                    # 42738300267 menunjukkan isi "Take a selfie, add a
+                    # way to sign in" dan tombolnya ada di bawah lipatan
+                    # layar. Gulir ke bawah dulu, lalu gulir tombolnya
+                    # ke tengah layar sebelum klik nyata, kalau tidak
+                    # koordinat kliknya jatuh di luar jendela.
+                    gulir_ke_bawah(page)
+                    time.sleep(0.7)
                     terklik = ""
                     for teks in ("Not now", "Skip", "No thanks", "Cancel"):
                         try:
+                            scroll_ke_teks(page, teks)
+                            time.sleep(0.4)
                             ok = real_click_element(page, teks)
                         except Exception:
                             ok = False
@@ -1238,7 +1302,8 @@ def login_google(page, user, password):
                     else:
                         log("Halaman speedbump passkey enrollment "
                             "terdeteksi; tombol lewati belum ketemu, "
-                            "dicoba lagi iterasi berikut.")
+                            "dicoba lagi iterasi berikut. Tombol "
+                            "terlihat: %s" % teks_tombol_visible(page))
                     if passkey_attempts >= 5 and not passkey_reported:
                         passkey_reported = True
                         log("Speedbump passkey tidak pindah sesudah "
