@@ -951,6 +951,13 @@ def login_google(page, user, password):
     otp_used = False
     ootp_since = 0.0
     verif_reported = False
+    # Watchdog keadaan asing (lihat dasar loop): href yang tidak
+    # ditangani cabang mana pun dilacak di sini; foreign_reported
+    # menahan laporan watchdog maksimal satu kali per run (di luar
+    # flag verif_reported milik callback itu sendiri).
+    foreign_href = ""
+    foreign_since = 0.0
+    foreign_reported = False
 
     def resend_prompt():
         # Klik tombol "Resend it" pada halaman Google prompt bila ada.
@@ -995,6 +1002,15 @@ def login_google(page, user, password):
         except Exception as _e:
             log("Callback verifikasi login gagal (diabaikan): %s" % _e)
 
+    def reset_asing():
+        # Cabang yang menangani iterasi loop membatalkan pelacakan
+        # watchdog keadaan asing: href asing yang sedang dilacak
+        # dilupakan, supaya sisa waktu tunggunya tidak ikut terhitung
+        # bila href yang sama muncul lagi sesudah keadaan tertangani.
+        nonlocal foreign_href, foreign_since
+        foreign_href = ""
+        foreign_since = 0.0
+
     while time.time() < deadline:
         try:
             href = js(
@@ -1016,6 +1032,8 @@ def login_google(page, user, password):
                 log("login URL: %s" % href[:220])
                 last_href = href
 
+            tertangani = False
+
             # Berhasil menuju CRD.
             if href.startswith(
                 "https://remotedesktop.google.com"
@@ -1029,6 +1047,7 @@ def login_google(page, user, password):
                 "notification" in body.lower()
                 and re.search(r"Tap \d{1,6} on your phone", body, re.I)
             ):
+                reset_asing()
                 if prompt_since == 0.0:
                     prompt_since = time.time()
                 m = re.search(r"Tap (\d{1,6}) on your phone", body, re.I)
@@ -1060,6 +1079,7 @@ def login_google(page, user, password):
 
             # Halaman pilih cara verifikasi: aktifkan jalur "security code".
             if "/signin/challenge/selection" in href:
+                reset_asing()
                 log("Halaman pilih verifikasi. Memilih 'security code'...")
                 if not real_click_element(
                     page,
@@ -1080,6 +1100,7 @@ def login_google(page, user, password):
                 )
                 != ""
             ):
+                reset_asing()
                 if ootp_since == 0.0:
                     ootp_since = time.time()
 
@@ -1174,6 +1195,39 @@ def login_google(page, user, password):
                     "Google menolak browser terotomasi."
                 )
 
+            # Speedbump sesudah password: halaman perantara Google
+            # yang bukan challenge (run 10 Nov 2026 berhenti diam di
+            # /speedbump/passkeyenrollment). Khusus passkey
+            # enrollment: klik tombol lewati. JANGAN pernah klik
+            # "Create passkey" atau tombol persetujuan apa pun.
+            if "/speedbump/" in href:
+                if "passkeyenrollment" in href or re.search(
+                    r"Create a passkey", body, re.I
+                ):
+                    reset_asing()
+                    terklik = ""
+                    for teks in ("Not now", "Skip", "No thanks", "Cancel"):
+                        try:
+                            ok = click_by_text(page, teks) or \
+                                real_click_element(page, teks)
+                        except Exception:
+                            ok = False
+                        if ok:
+                            terklik = teks
+                            break
+                    if terklik:
+                        log("Halaman speedbump passkey enrollment "
+                            "terdeteksi; tombol lewati %r diklik." % terklik)
+                    else:
+                        log("Halaman speedbump passkey enrollment "
+                            "terdeteksi; tombol lewati belum ketemu, "
+                            "dicoba lagi iterasi berikut.")
+                    time.sleep(2)
+                    continue
+                # Speedbump selain passkey tidak ditebak tombolnya;
+                # iterasi ini jatuh ke watchdog keadaan asing di
+                # dasar loop untuk dilaporkan, bukan ditebak.
+
             # Challenge MFA/OTP yang benar-benar aktif.
             challenge = re.search(
                 r"/signin/challenge/(mfa|otp|totp|sms|"
@@ -1203,10 +1257,33 @@ def login_google(page, user, password):
                 href,
                 re.I
             ):
+                tertangani = True
                 if click_login_button(page):
                     log("submit password ulang via tombol Next.")
                 else:
                     press_enter(page)
+
+            # Watchdog keadaan asing: iterasi yang sampai ke sini
+            # tanpa ditangani cabang mana pun (bukan sukses, dp,
+            # selection, ootp, speedbump passkey, MFA, atau pwd)
+            # dilacak per href. Bila href asing yang sama bertahan
+            # >60 detik, laporkan SATU kali ke issue lewat callback
+            # verifikasi, lalu loop tetap menunggu sampai deadline
+            # seperti biasa (tidak die lebih awal).
+            if tertangani:
+                foreign_href = ""
+                foreign_since = 0.0
+            elif href != foreign_href:
+                foreign_href = href
+                foreign_since = time.time()
+            elif (not foreign_reported and foreign_since > 0.0
+                    and time.time() - foreign_since > 60):
+                foreign_reported = True
+                log("Keadaan login tidak dikenal bertahan >60 dtk; "
+                    "dilaporkan ke issue: %s" % href[:120])
+                lapor_verifikasi(
+                    "verifikasi-login",
+                    "keadaan login tidak dikenal: %s" % href[:120])
 
             time.sleep(2)
 
