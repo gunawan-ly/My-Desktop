@@ -148,7 +148,7 @@ jobs:
         run: |
           bash scripts/crd/setup_crd_v2.sh
 
-      - name: Install aplikasi sesi (BetterDisplay + displayplacer)
+      - name: Install aplikasi sesi (BetterDisplay + displayplacer + VS Code)
         if: ${{ success() }}
         continue-on-error: true
         run: |
@@ -157,6 +157,8 @@ jobs:
           brew install --cask betterdisplay 2>&1 | tail -2 || echo "::warning::brew install betterdisplay gagal"
           echo "Install displayplacer (untuk set resolusi display)..."
           brew install displayplacer 2>&1 | tail -2 || echo "::warning::brew install displayplacer gagal"
+          echo "Install Visual Studio Code..."
+          brew install --cask visual-studio-code 2>&1 | tail -2 || echo "::warning::brew install visual-studio-code gagal"
           echo "Install selesai."
 
       - name: Install aplikasi chat (Telegram + WhatsApp + Discord)
