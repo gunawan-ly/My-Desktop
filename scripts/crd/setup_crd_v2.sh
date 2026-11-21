@@ -426,18 +426,23 @@ enroll_host() {
   rm -f "$TMP"
   log "Config host tertulis (mode 644): $CONFIG_FILE"
 
-  # Audio Mac: host hanya membuat audio capturer bila config memuat
-  # audio_capture_device_uid (nama internal Chromium; diverifikasi dari
-  # strings libremoting_core.dylib host 157 + uji lapangan 21 Nov 2026).
-  # Isi dgn UID BlackHole 2ch, perangkat loopback yg dipasang
-  # setup_audio_loopback().
-  if sudo -n python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["audio_capture_device_uid"]="BlackHole2ch_UID"; json.dump(d, open(p,"w"), indent=2)' "$CONFIG_FILE" 2>/dev/null; then
-    log "audio_capture_device_uid terpasang di config host (BlackHole2ch_UID)."
-  else
-    log "Peringatan: gagal memasang audio_capture_device_uid di config host."
-  fi
-
   sudo -n rm -f "$SETTINGS_FILE" 2>/dev/null || true
+
+  # Audio Mac (TERBUKTI 21 Nov 2026: suara CRD bunyi di HP Awan, log host
+  # "Using loopback device: BlackHole2ch_UID" + "Audio capture permission
+  # granted", SDP memuat m=audio/opus): audio capturer membaca
+  # audio_capture_device_uid dari file SETTINGS host (HostSettings /
+  # FileHostSettings di kode Chromium, remoting/host/host_setting_keys.h),
+  # BUKAN dari config host. Tanpa kunci ini AudioCapturer::IsSupported()
+  # false dan host tidak pernah membuat jalur audio sama sekali. Isi dgn
+  # UID BlackHole 2ch yg dipasang setup_audio_loopback().
+  if printf '%s' '{"audio_capture_device_uid": "BlackHole2ch_UID"}' | sudo -n tee "$SETTINGS_FILE" >/dev/null 2>&1; then
+    sudo -n chown root:wheel "$SETTINGS_FILE" 2>/dev/null || true
+    sudo -n chmod 644 "$SETTINGS_FILE" 2>/dev/null || true
+    log "audio_capture_device_uid terpasang di file settings host."
+  else
+    log "Peringatan: gagal menulis file settings host."
+  fi
 }
 
 wake_display() {
