@@ -789,11 +789,18 @@ def fill_password(page, selector, text):
                      "return {act:e?e.value:null, q:q?q.value:null, "
                      "an:e?(e.tagName+'/'+e.name):null, "
                      "qn:q?(q.tagName+'/'+q.name):null};})()" % json.dumps(selector), timeout=10)
+        # Nilai field password TIDAK boleh masuk log (pernah bocor polos ke
+        # artefak workflow publik). Samarkan khusus utk logging; verifikasi
+        # di bawah tetap memakai nilai aslinya.
+        secret = bool(act and act.get("type") == "password")
+        if secret and isinstance(v, dict):
+            v = {k: ("***" if k in ("act", "q") and val else val)
+                 for k, val in v.items()}
         log("  after-keys=%s" % v)
         time.sleep(0.9)
         v2 = js(page, "(function(){var e=document.querySelector(%s);return e?e.value:null;})()"
                 % json.dumps(selector), timeout=10)
-        log("  after-1s q.value=%r" % v2)
+        log("  after-1s q.value=%r" % ("***" if secret and v2 else v2))
         if v2 and v2 == text:
             return True
         if attempt < 4:

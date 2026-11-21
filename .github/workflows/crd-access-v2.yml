@@ -227,7 +227,7 @@ jobs:
           path: |
             /tmp/crd-*.png
             /tmp/crd-*.log
-            /tmp/crd.enroll.err.log
+            !/tmp/crd.enroll.err.log
             /tmp/crd.code
             /tmp/crd.dmg
             /tmp/crd.start.log
