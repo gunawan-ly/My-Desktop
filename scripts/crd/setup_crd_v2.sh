@@ -273,18 +273,25 @@ grant_tcc() {
   # (baris TCC-nya tidak ada sama sekali, diverifikasi dari TCC.db + log
   # host 21 Nov 2026); pra-grant ini percobaan agar host mau membuat audio
   # capturer bila ia memeriksa izin lebih dulu (preflight).
+  # HASIL TES 21 Nov 2026 malam: grant AudioCapture mendarat sempurna TAPI
+  # suara tetap senyap; log tccd menunjukkan host memeriksa (preflight)
+  # kTCCServiceMicrophone, BUKAN AudioCapture. Itu cocok dgn kode Chromium
+  # (remoting/host/mac/permission_utils.h: CanCaptureAudio memeriksa izin
+  # Microphone, dan audio_capturer_mac hanya dibuat bila konfigurasi host
+  # memuat audio_capture_device_uid). Jadi Microphone-lah gerbang aslinya;
+  # AudioCapture dipertahankan (tidak merugikan).
   for svc in kTCCServiceScreenCapture kTCCServiceAccessibility kTCCServicePostEvent \
              kTCCServiceListenEvent kTCCServiceAppleEvents kTCCServiceRemoteDesktop \
-             kTCCServiceAudioCapture; do
+             kTCCServiceAudioCapture kTCCServiceMicrophone; do
     tcc_fix "$svc" "$BUNDLE_ID" 0 "$csreq_h"
   done
   for svc in kTCCServiceScreenCapture kTCCServiceAccessibility kTCCServicePostEvent \
              kTCCServiceListenEvent kTCCServiceAppleEvents kTCCServiceRemoteDesktop \
-             kTCCServiceAudioCapture; do
+             kTCCServiceAudioCapture kTCCServiceMicrophone; do
     tcc_fix "$svc" "$HOST_BIN" 1 "$csreq_h"
   done
   if [ -n "$APP_BUNDLE" ]; then
-    for svc in kTCCServiceScreenCapture kTCCServiceAudioCapture kTCCServiceAccessibility kTCCServicePostEvent; do
+    for svc in kTCCServiceScreenCapture kTCCServiceAudioCapture kTCCServiceMicrophone kTCCServiceAccessibility kTCCServicePostEvent; do
       tcc_fix "$svc" "$APP_BUNDLE" 1 "$csreq_h"
     done
   fi
@@ -419,6 +426,17 @@ enroll_host() {
   rm -f "$TMP"
   log "Config host tertulis (mode 644): $CONFIG_FILE"
 
+  # Audio Mac: host hanya membuat audio capturer bila config memuat
+  # audio_capture_device_uid (nama internal Chromium; diverifikasi dari
+  # strings libremoting_core.dylib host 157 + uji lapangan 21 Nov 2026).
+  # Isi dgn UID BlackHole 2ch, perangkat loopback yg dipasang
+  # setup_audio_loopback().
+  if sudo -n python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["audio_capture_device_uid"]="BlackHole2ch_UID"; json.dump(d, open(p,"w"), indent=2)' "$CONFIG_FILE" 2>/dev/null; then
+    log "audio_capture_device_uid terpasang di config host (BlackHole2ch_UID)."
+  else
+    log "Peringatan: gagal memasang audio_capture_device_uid di config host."
+  fi
+
   sudo -n rm -f "$SETTINGS_FILE" 2>/dev/null || true
 }
 
@@ -510,6 +528,40 @@ PY
 }
 
 # ---------------------------------------------------------------------------
+# Audio loopback utk CRD Mac: penangkap audio host membaca PERANGKAT TANGKAP
+# bernama (audio_capture_device_uid), bukan output sistem secara otomatis.
+# BlackHole 2ch dipasang sebagai perangkat itu dan dijadikan output default
+# + output sistem default, agar suara aplikasi mengalir ke dalamnya.
+# Kegagalan di sini TIDAK menggagalkan sesi (cukup peringatan): fungsi utama
+# sesi tetap akses CRD-nya.
+# ---------------------------------------------------------------------------
+setup_audio_loopback() {
+  local DRV="/Library/Audio/Plug-Ins/HAL/BlackHole2ch.driver"
+  if [ -d "$DRV" ]; then
+    log "BlackHole 2ch sudah terpasang."
+  else
+    log "Memasang BlackHole 2ch (cask homebrew)..."
+    run_bounded 600 "brew install --cask blackhole-2ch" >/dev/null 2>&1 \
+      || log "Peringatan: brew install blackhole-2ch gagal."
+    sudo -n killall coreaudiod 2>/dev/null || true
+    sleep 5
+  fi
+  if ! command -v SwitchAudioSource >/dev/null 2>&1; then
+    run_bounded 300 "brew install switchaudio-osx" >/dev/null 2>&1 \
+      || log "Peringatan: brew install switchaudio-osx gagal."
+  fi
+  if command -v SwitchAudioSource >/dev/null 2>&1; then
+    if SwitchAudioSource -s "BlackHole 2ch" -t output >/dev/null 2>&1; then
+      log "Output default -> BlackHole 2ch."
+    else
+      log "Peringatan: gagal menjadikan BlackHole output default."
+    fi
+    SwitchAudioSource -s "BlackHole 2ch" -t system >/dev/null 2>&1 || true
+    log "Output default sekarang: $(SwitchAudioSource -c -t output 2>/dev/null || echo '?')"
+  fi
+}
+
+# ---------------------------------------------------------------------------
 main() {
   [ -n "$GOOGLE_USER" ] || die "GOOGLE_USER kosong (email akun pemilik CRD)."
   case "$GOOGLE_USER" in *@*) ;; *) die "GOOGLE_USER bukan email valid.";; esac
@@ -531,6 +583,7 @@ main() {
   enroll_host
 
   grant_tcc "$HOST_BIN"
+  setup_audio_loopback
   setup_launchagent "$HOST_BIN"
   bounce_host
   wake_display
