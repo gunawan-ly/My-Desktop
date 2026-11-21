@@ -268,16 +268,23 @@ grant_tcc() {
   # PENTING: nama service harus KANONIKAL (prefix kTCCService*) — nama
   # telanjang (ScreenCapture/Accessibility/...) DIIGNORALKAN oleh tccd
   # (ditemukan lapangan di mesin dev; input mati total).
+  # kTCCServiceAudioCapture (ditambah 21 Nov 2026): pra-grant izin tangkap
+  # audio sistem utk host. Host historisnya TIDAK PERNAH meminta izin ini
+  # (baris TCC-nya tidak ada sama sekali, diverifikasi dari TCC.db + log
+  # host 21 Nov 2026); pra-grant ini percobaan agar host mau membuat audio
+  # capturer bila ia memeriksa izin lebih dulu (preflight).
   for svc in kTCCServiceScreenCapture kTCCServiceAccessibility kTCCServicePostEvent \
-             kTCCServiceListenEvent kTCCServiceAppleEvents kTCCServiceRemoteDesktop; do
+             kTCCServiceListenEvent kTCCServiceAppleEvents kTCCServiceRemoteDesktop \
+             kTCCServiceAudioCapture; do
     tcc_fix "$svc" "$BUNDLE_ID" 0 "$csreq_h"
   done
   for svc in kTCCServiceScreenCapture kTCCServiceAccessibility kTCCServicePostEvent \
-             kTCCServiceListenEvent kTCCServiceAppleEvents kTCCServiceRemoteDesktop; do
+             kTCCServiceListenEvent kTCCServiceAppleEvents kTCCServiceRemoteDesktop \
+             kTCCServiceAudioCapture; do
     tcc_fix "$svc" "$HOST_BIN" 1 "$csreq_h"
   done
   if [ -n "$APP_BUNDLE" ]; then
-    for svc in kTCCServiceScreenCapture kTCCServiceAccessibility kTCCServicePostEvent; do
+    for svc in kTCCServiceScreenCapture kTCCServiceAudioCapture kTCCServiceAccessibility kTCCServicePostEvent; do
       tcc_fix "$svc" "$APP_BUNDLE" 1 "$csreq_h"
     done
   fi
