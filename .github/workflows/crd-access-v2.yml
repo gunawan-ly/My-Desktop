@@ -218,6 +218,34 @@ jobs:
             echo "::warning::displayplacer gagal set 1600x900."
           fi
 
+      - name: Samakan terminal dengan Linux (zsh + tema)
+        if: ${{ success() }}
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          # Terminal sesi disamakan dengan mesin Linux Awan (setup 21 Nov 2026):
+          # zsh + perintah `tema` (8 tema Starship/powerlevel10k), syntax
+          # highlighting, autosuggestions, fzf, eza, fastfetch. Kit-nya disimpan
+          # di scripts/terminal/ (disalin dari mesin InstaBox utama, alamat
+          # plugin disesuaikan ke Homebrew).
+          echo "Install perangkat terminal..."
+          brew install starship powerlevel10k zsh-autosuggestions \
+            zsh-syntax-highlighting fzf eza fastfetch 2>&1 | tail -2 \
+            || echo "::warning::sebagian perangkat terminal gagal terpasang"
+          brew install --cask font-fira-code-nerd-font 2>&1 | tail -2 \
+            || echo "::warning::font Fira Code Nerd Font gagal terpasang"
+          echo "Pasang konfigurasi terminal..."
+          KIT="scripts/terminal"
+          cp "$KIT/zshrc" ~/.zshrc
+          mkdir -p ~/.config/starship-themes ~/.config/p10k-themes
+          cp "$KIT"/starship-themes/*.toml ~/.config/starship-themes/
+          cp "$KIT"/p10k-themes/*.zsh ~/.config/p10k-themes/
+          echo starship-pastel-powerline > ~/.prompt-theme
+          echo "Set font Terminal ke Fira Code Nerd Font (best effort)..."
+          osascript -e 'tell application "Terminal" to set font name of default settings to "FiraCode Nerd Font"' 2>/dev/null \
+            || echo "::warning::set font Terminal gagal; atur manual bila ikon prompt tampil kotak"
+          echo "Terminal selesai: tema aktif powerline, ganti dengan perintah tema."
+
       - name: Bersihkan indeks Spotlight (kecualikan node_modules + bangun ulang)
         if: ${{ success() }}
         continue-on-error: true

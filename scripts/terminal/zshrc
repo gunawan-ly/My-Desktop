@@ -1,0 +1,97 @@
+# ============================================================
+#  ~/.zshrc - pengaturan terminal zsh punya Awan (edisi Mac)
+#  Isi SAMA dengan mesin Linux Awan (dipasang Lyra 21 Nov 2026);
+#  yang disesuaikan cuma alamat pluginnya: di Mac semuanya dari
+#  Homebrew, bukan /usr/share seperti di Debian. File ini dibaca
+#  zsh setiap terminal baru dibuka. Baris diawali # = komentar.
+# ============================================================
+
+# Alamat Homebrew (di Mac Apple Silicon: /opt/homebrew)
+_brew_prefix="$(command -v brew >/dev/null 2>&1 && brew --prefix || echo /opt/homebrew)"
+
+# Folder bin pribadi masuk PATH
+export PATH="$HOME/.local/bin:$PATH"
+
+# --- Riwayat perintah (history) ---
+HISTFILE=~/.zsh_history      # riwayat disimpan di file ini
+HISTSIZE=10000               # yang diingat di memori
+SAVEHIST=10000               # yang disimpan di file
+setopt SHARE_HISTORY         # semua tab terminal berbagi riwayat yang sama
+setopt HIST_IGNORE_DUPS      # perintah yang sama berurutan tidak dicatat dobel
+setopt HIST_IGNORE_SPACE     # perintah diawali spasi tidak dicatat (buat yang rahasia)
+
+# --- Prompt: mesin temanya dipilih lewat perintah `tema` ---
+# Keadaan tersimpan di file ~/.prompt-theme. Cara pakai:
+#   tema            -> lihat tema aktif dan daftar pilihan
+#   tema <nama>     -> ganti tema, shell dimuat ulang otomatis
+_prompt_aktif=$(cat ~/.prompt-theme 2>/dev/null || echo p10k-garis)
+case "$_prompt_aktif" in
+  starship-*)
+    export STARSHIP_CONFIG="$HOME/.config/starship-themes/${_prompt_aktif#starship-}.toml"
+    command -v starship >/dev/null 2>&1 && eval "$(starship init zsh)"
+    ;;
+  p10k-*)
+    typeset -g POWERLEVEL9K_DISABLE_CONFIGURATION_WIZARD=true
+    [ -f "$_brew_prefix/share/powerlevel10k/powerlevel10k.zsh-theme" ] \
+      && source "$_brew_prefix/share/powerlevel10k/powerlevel10k.zsh-theme"
+    source "$HOME/.config/p10k-themes/${_prompt_aktif#p10k-}.zsh"
+    ;;
+esac
+
+# Perintah ganti tema
+tema() {
+  case "$1" in
+    powerline) echo starship-pastel-powerline > ~/.prompt-theme ;;
+    tokyo)     echo starship-tokyo-night > ~/.prompt-theme ;;
+    gruvbox)   echo starship-gruvbox-rainbow > ~/.prompt-theme ;;
+    garis)     echo p10k-garis > ~/.prompt-theme ;;
+    rainbow)   echo p10k-rainbow > ~/.prompt-theme ;;
+    classic)   echo p10k-classic > ~/.prompt-theme ;;
+    pure)      echo p10k-pure > ~/.prompt-theme ;;
+    robby)     echo p10k-robby > ~/.prompt-theme ;;
+    *) echo "Tema aktif: $(cat ~/.prompt-theme 2>/dev/null || echo p10k-garis)"
+       echo "Pilihan: powerline tokyo gruvbox garis rainbow classic pure robby"
+       return 1 ;;
+  esac
+  echo "Tema diganti ke: $1 (shell dimuat ulang)"
+  exec zsh
+}
+
+# --- Alias: perintah singkat pengganti ---
+alias ls='eza --icons'       # ls berwarna + ikon
+alias ll='eza -la --icons'   # ls lengkap semua file
+alias lt='eza --tree --icons'
+
+# --- Auto-complete (tombol Tab) ---
+autoload -Uz compinit && compinit
+# dircolors itu bawaan Linux; di Mac pakai gdircolors (coreutils) bila ada.
+if command -v dircolors >/dev/null 2>&1; then
+  eval "$(dircolors -b)"
+elif command -v gdircolors >/dev/null 2>&1; then
+  eval "$(gdircolors -b)"
+fi
+zstyle ':completion:*' menu select                  # Tab membuka menu, pilih pakai panah
+zstyle ':completion:*' matcher-list 'm:{a-z}={A-Z}'  # huruf besar kecil dianggap sama
+zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"  # saran Tab ikut berwarna
+
+# --- Autosuggestion: saran abu-abu dari riwayat ---
+# Pas ngetik, sisa perintah yang pernah dipakai muncul abu-abu.
+# Terima sarannya pakai tombol panah kanan atau End.
+[ -f "$_brew_prefix/share/zsh-autosuggestions/zsh-autosuggestions.zsh" ] \
+  && source "$_brew_prefix/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
+
+# --- fzf: pencarian cepat ---
+# Ctrl+R = cari riwayat perintah, Ctrl+T = cari file, Alt+C = lompat folder
+command -v fzf >/dev/null 2>&1 && eval "$(fzf --zsh)"
+
+# --- Info sistem tiap terminal dibuka ---
+command -v fastfetch >/dev/null 2>&1 && fastfetch
+
+# --- Syntax highlighting: pewarnaan perintah pas ngetik ---
+# Perintah valid hijau, salah merah, string kuning, path bergaris bawah.
+# Plugin ini WAJIB dimuat paling akhir, jangan dipindah ke atas.
+[ -f "$_brew_prefix/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ] \
+  && source "$_brew_prefix/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+
+# npm global punya mesin (bila ada) ikut masuk PATH
+command -v npm >/dev/null 2>&1 && export PATH="$(npm config get prefix)/bin:$PATH"
