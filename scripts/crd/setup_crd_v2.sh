@@ -537,6 +537,9 @@ PY
 # bernama (audio_capture_device_uid), bukan output sistem secara otomatis.
 # BlackHole 2ch dipasang sebagai perangkat itu dan dijadikan output default
 # + output sistem default, agar suara aplikasi mengalir ke dalamnya.
+# BlackHole 16ch ikut dipasang sebagai jalur mic TERPISAH (lihat bloknya di
+# bawah): keluaran receive AudioRelay diarahkan ke 16ch, aplikasi (Discord)
+# membacanya sebagai input, tanpa bercampur jalur suara utama 2ch.
 # Kegagalan di sini TIDAK menggagalkan sesi (cukup peringatan): fungsi utama
 # sesi tetap akses CRD-nya.
 # ---------------------------------------------------------------------------
@@ -548,6 +551,22 @@ setup_audio_loopback() {
     log "Memasang BlackHole 2ch (cask homebrew)..."
     run_bounded 600 "brew install --cask blackhole-2ch" >/dev/null 2>&1 \
       || log "Peringatan: brew install blackhole-2ch gagal."
+    sudo -n killall coreaudiod 2>/dev/null || true
+    sleep 5
+  fi
+  # BlackHole 16ch: jalur mic terpisah dari jalur suara utama (2ch). Pola
+  # terbukti di sesi Awan 22 Nov 2026: AudioRelay di Mac menerima mic HP,
+  # keluarannya diarahkan ke 16ch, lalu Discord memilih 16ch sebagai input.
+  # Bila mic masuk lewat 2ch, suara bercampur output sistem dan mantul balik
+  # ke HP lewat CRD. Perangkat ini TIDAK dijadikan default apa pun di sini;
+  # pemilihannya manual di AudioRelay dan Discord dalam sesi.
+  local DRV16="/Library/Audio/Plug-Ins/HAL/BlackHole16ch.driver"
+  if [ -d "$DRV16" ]; then
+    log "BlackHole 16ch sudah terpasang."
+  else
+    log "Memasang BlackHole 16ch (cask homebrew)..."
+    run_bounded 600 "brew install --cask blackhole-16ch" >/dev/null 2>&1 \
+      || log "Peringatan: brew install blackhole-16ch gagal."
     sudo -n killall coreaudiod 2>/dev/null || true
     sleep 5
   fi
