@@ -218,6 +218,32 @@ jobs:
             echo "::warning::displayplacer gagal set 1600x900."
           fi
 
+      - name: Bersihkan indeks Spotlight (kecualikan node_modules + bangun ulang)
+        if: ${{ success() }}
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          # Spotlight di sesi fresh kebanjiran indeks node_modules (puluhan ribu
+          # file kecil bawaan image + hasil instalasi awal), sampai hasil
+          # aplikasi tenggelam/hilang dari pencarian (kejadian 22 Nov 2026:
+          # cari BetterDisplay malah muncul folder node_modules). Tandai semua
+          # node_modules yang sudah ada sebagai jangan-diindeks, lalu bangun
+          # ulang indeks dari nol sebagai langkah terakhir setup, supaya
+          # Spotlight langsung normal saat sesi dipakai.
+          echo "Menandai node_modules sebagai .metadata_never_index..."
+          for root in "$HOME" /usr/local/lib /opt/homebrew/lib; do
+            [ -d "$root" ] || continue
+            find "$root" -maxdepth 8 -type d -name node_modules -prune \
+              -exec touch {}/.metadata_never_index \; 2>/dev/null || true
+          done
+          echo "Membangun ulang indeks Spotlight (mdutil -E /)..."
+          sudo -n mdutil -i on / 2>/dev/null || true
+          if sudo -n mdutil -E / 2>/dev/null; then
+            echo "Indeks Spotlight dibangun ulang; Spotlight bersih dalam beberapa menit."
+          else
+            echo "::warning::mdutil -E gagal; Spotlight mungkin perlu dibangun ulang manual."
+          fi
+
       - name: Upload Debug Artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
