@@ -148,6 +148,35 @@ jobs:
         run: |
           bash scripts/crd/setup_crd_v2.sh
 
+      - name: Sambungkan Tailscale (biar Lyra bisa SSH masuk)
+        env:
+          TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+        timeout-minutes: 5
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          # Pola manual yang terbukti di sesi 21 Nov 2026, diotomatiskan:
+          # pasang CLI + daemon sistem, lalu gabung tailnet pakai auth key.
+          # Key-nya secret repo TAILSCALE_AUTHKEY; nilainya TIDAK ditulis
+          # di repo ini (repo publik). Sesudah langkah ini node muncul di
+          # tailnet dengan nama host sesi, dan Lyra bisa masuk lewat SSH
+          # untuk memeriksa sesi dari dalam.
+          if [ -z "${TAILSCALE_AUTHKEY:-}" ]; then
+            echo "::warning::Secret TAILSCALE_AUTHKEY kosong; langkah Tailscale dilewati."
+            exit 0
+          fi
+          echo "Install Tailscale CLI..."
+          brew install tailscale 2>&1 | tail -2 || echo "::warning::brew install tailscale gagal"
+          echo "Pasang daemon sistem Tailscale..."
+          sudo -n tailscaled install-system-daemon 2>&1 | tail -2 \
+            || echo "::warning::install-system-daemon gagal"
+          echo "Sambungkan ke tailnet sebagai ${{ inputs.hostname }}..."
+          if sudo -n tailscale up --authkey="$TAILSCALE_AUTHKEY" --hostname="${{ inputs.hostname }}"; then
+            echo "Tailscale tersambung: $(tailscale ip -4 2>/dev/null || echo '?')"
+          else
+            echo "::warning::tailscale up gagal; sesi tetap jalan tanpa tailnet"
+          fi
+
       - name: Install aplikasi sesi (BetterDisplay + displayplacer + VS Code)
         if: ${{ success() }}
         continue-on-error: true
@@ -172,6 +201,8 @@ jobs:
           brew install --cask whatsapp 2>&1 | tail -2 || echo "::warning::brew install whatsapp gagal"
           echo "Install Discord..."
           brew install --cask discord 2>&1 | tail -2 || echo "::warning::brew install discord gagal"
+          echo "Install AudioRelay (mic HP dipakai dari dalam sesi)..."
+          brew install --cask audiorelay 2>&1 | tail -2 || echo "::warning::brew install audiorelay gagal"
           echo "Install aplikasi chat selesai."
 
       - name: Terapkan settingan sesi (dark mode, aksesibilitas, region)
