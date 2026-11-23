@@ -1025,6 +1025,13 @@ def login_google(page, user, password):
     passkey_href = ""
     passkey_attempts = 0
     passkey_reported = False
+    # Pelacak percobaan klik Cancel halaman recovery info Google
+    # ("Make sure you can always sign in"): pola yang sama seperti
+    # pelacak passkey di atas, dihitung per href yang sama dan
+    # dilaporkan satu kali bila halaman tidak pindah juga.
+    recovery_href = ""
+    recovery_attempts = 0
+    recovery_reported = False
 
     def resend_prompt():
         # Klik tombol "Resend it" pada halaman Google prompt bila ada.
@@ -1322,9 +1329,68 @@ def login_google(page, user, password):
                             "%d kali klik lewati" % passkey_attempts)
                     time.sleep(2)
                     continue
-                # Speedbump selain passkey tidak ditebak tombolnya;
-                # iterasi ini jatuh ke watchdog keadaan asing di
-                # dasar loop untuk dilaporkan, bukan ditebak.
+                # Speedbump selain passkey tidak ditebak tombolnya
+                # di sini; recovery info ditangani cabang khusus
+                # tepat di bawah, sisanya jatuh ke watchdog keadaan
+                # asing di dasar loop untuk dilaporkan.
+
+            # Halaman perantara recovery info sesudah password:
+            # "Make sure you can always sign in" (Google meminta
+            # konfirmasi info pemulihan; run 45181137100 di
+            # Projects-Area-51, 23 Nov 2026, berhenti di halaman
+            # ini dan dilaporkan watchdog sebagai keadaan asing).
+            # Halaman ini opsional dan tombol lewatinya "Cancel".
+            # JANGAN pernah klik "Save": kolom nomor HP di sana
+            # kosong, dan menyimpan info pemulihan akun bukan
+            # wewenang enroll. Pola kliknya meniru persis
+            # penanganan speedbump passkey di atas: gulir dulu,
+            # klik mouse nyata (bukan klik JS), laporkan ke issue
+            # hanya bila 5 kali percobaan pun halaman tidak
+            # pindah. Deteksinya tidak bergantung pada potongan
+            # "/speedbump/" di URL, karena halaman ini juga
+            # muncul dari jalur /signin/v2/discovery/.
+            if "recoveryinfo" in href or re.search(
+                r"Make sure you can always sign in", body, re.I
+            ):
+                reset_asing()
+                if href != recovery_href:
+                    recovery_href = href
+                    recovery_attempts = 0
+                    recovery_reported = False
+                recovery_attempts += 1
+                gulir_ke_bawah(page)
+                time.sleep(0.7)
+                terklik = ""
+                for teks in ("Cancel",):
+                    try:
+                        scroll_ke_teks(page, teks)
+                        time.sleep(0.4)
+                        ok = real_click_element(page, teks)
+                    except Exception:
+                        ok = False
+                    if ok:
+                        terklik = teks
+                        break
+                if terklik:
+                    log("Halaman recovery info terdeteksi; tombol "
+                        "Cancel diklik nyata (percobaan ke-%d)."
+                        % recovery_attempts)
+                else:
+                    log("Halaman recovery info terdeteksi; tombol "
+                        "Cancel belum ketemu, dicoba lagi iterasi "
+                        "berikut. Tombol terlihat: %s"
+                        % teks_tombol_visible(page))
+                if recovery_attempts >= 5 and not recovery_reported:
+                    recovery_reported = True
+                    log("Halaman recovery info tidak pindah sesudah "
+                        "%d kali percobaan klik; dilaporkan ke "
+                        "issue dengan screenshot." % recovery_attempts)
+                    lapor_verifikasi(
+                        "verifikasi-login",
+                        "halaman recovery info tidak pindah sesudah "
+                        "%d kali klik Cancel" % recovery_attempts)
+                time.sleep(2)
+                continue
 
             # Challenge MFA/OTP yang benar-benar aktif.
             challenge = re.search(
@@ -1363,7 +1429,8 @@ def login_google(page, user, password):
 
             # Watchdog keadaan asing: iterasi yang sampai ke sini
             # tanpa ditangani cabang mana pun (bukan sukses, dp,
-            # selection, ootp, speedbump passkey, MFA, atau pwd)
+            # selection, ootp, speedbump passkey, recovery info,
+            # MFA, atau pwd)
             # dilacak per href. Bila href asing yang sama bertahan
             # >60 detik, laporkan SATU kali ke issue lewat callback
             # verifikasi, lalu loop tetap menunggu sampai deadline
